@@ -265,7 +265,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		if(mode == 0)
 		{
 			if(mode_changed_flag)
+			{
 				pid_voltage.last_error =	Voltage_Out_Set - Voltage_Out;
+				mode_changed_flag = 0;
+			}
 			
 			PID_Calc(&pid_voltage, Voltage_Out_Set - Voltage_Out);
 			ctrl += pid_voltage.output;
@@ -277,7 +280,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		if(mode == 1)
 		{
 			if(mode_changed_flag)
+			{
 				pid_current.last_error =	Current_Out_Set - Current_Out;
+				mode_changed_flag = 0;
+			}
 			
 			PID_Calc(&pid_current, Current_Out_Set - Current_Out);
 			ctrl += pid_current.output;
@@ -287,15 +293,16 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		if(mode == 2)
 		{
 			if(mode_changed_flag)
+			{
 				pid_current.last_error =	Current_In_Set - Current_In;
+				mode_changed_flag = 0;
+			}
 			
 			PID_Calc(&pid_current, Current_In_Set - Current_In);
 			ctrl += pid_current.output;
 			
 			LIMIT(ctrl, 0.5f, 2*MAX_VOLTAGE);
-		}
-		if(mode_changed_flag)
-			mode_changed_flag = 0;
+		}			
 
 		if(ctrl <= BASE_VOLTAGE)
 		{
