@@ -44,8 +44,14 @@
 #define PHASE_SHIFT 14400
 #define MAX_VOLTAGE ((float)42.3)
 #define BASE_VOLTAGE ((float)18.5)
-#define CURRENT_LINEAR_A ((float)1)
-#define CURRENT_LINEAR_B ((float)0)
+#define VOLTAGE_OUT_LINEAR_A (0.0102601752)
+#define VOLTAGE_OUT_LINEAR_B (0.5932726908)
+#define CURRENT_OUT_LINEAR_A (-0.004751058)
+#define CURRENT_OUT_LINEAR_B (12.48739301)
+#define CURRENT_IN_LINEAR_A (-0.005096203)
+#define CURRENT_IN_LINEAR_B (13.41522621)
+#define CURRENT_ADC_FILTER 30
+#define VOLTAGE_OFFSET 0.5
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -141,15 +147,15 @@ int main(void)
 	RX_Addr[5] = &Current_Out_Set;
 	RX_Addr[6] = &Current_In_Set;
 	
-	pid_voltage.kp=0;
+	pid_voltage.kp=0.04;
 	pid_voltage.ki=0;
-	pid_voltage.kd=0;
+	pid_voltage.kd=0.12;
 	pid_voltage.max_integral=MAX_VOLTAGE;
 	pid_voltage.max_output=MAX_VOLTAGE;
 	
-	pid_current.kp=0;
+	pid_current.kp=0.06;
 	pid_current.ki=0;
-	pid_current.kd=0;
+	pid_current.kd=0.04;
 	pid_current.max_integral=MAX_VOLTAGE;
 	pid_current.max_output=MAX_VOLTAGE;
 	
@@ -227,21 +233,33 @@ void SystemClock_Config(void)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
 	static uint16_t Tx_Counter;
-	
+	static uint16_t Current_ADC_Filter_Counter;
+	static uint32_t Current_Out_ADC_Buffer, Current_In_ADC_Buffer;
 	if(htim->Instance == TIM3)
 	{
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
 		
-		Voltage_Out = ADC_Buffer[0]*MAX_VOLTAGE/4095;
-		Voltage_In = ADC_Buffer[1]*MAX_VOLTAGE/4095;
-//		Current_1 = ((float)ADC_Buffer[2]/4095*3.3-2.5)/-0.185;
-//		Current_2 = ((float)ADC_Buffer[2]/4095*3.3-2.5)/-0.185;
-//		Current_1 = (float)ADC_Buffer[2] * CURRENT_LINEAR_A + CURRENT_LINEAR_B;
-//		Current_2 = (float)ADC_Buffer[3] * CURRENT_LINEAR_A + CURRENT_LINEAR_B;
-		Current_Out = ADC_Buffer[2];
-		Current_In = ADC_Buffer[3];
+//		Voltage_Out = ADC_Buffer[0]*MAX_VOLTAGE/4095;
+		Voltage_Out = ADC_Buffer[0] * VOLTAGE_OUT_LINEAR_A + VOLTAGE_OUT_LINEAR_B;
+		Voltage_In = ADC_Buffer[1]*MAX_VOLTAGE/4095 + VOLTAGE_OFFSET;
 		
-		if(mode != (uint8_t)mode_f)
+		Current_Out_ADC_Buffer += ADC_Buffer[2];
+		Current_In_ADC_Buffer += ADC_Buffer[3];
+		Current_ADC_Filter_Counter++;
+		if(Current_ADC_Filter_Counter == CURRENT_ADC_FILTER)
+		{
+			Current_ADC_Filter_Counter = 0;
+//			Current_Out = ((float)ADC_Buffer[2]/4095*3.3-2.5)/-0.185;
+//			Current_In = ((float)ADC_Buffer[2]/4095*3.3-2.5)/-0.185;
+			Current_Out = (float)Current_Out_ADC_Buffer / CURRENT_ADC_FILTER * CURRENT_OUT_LINEAR_A + CURRENT_OUT_LINEAR_B;
+			Current_In = (float)Current_In_ADC_Buffer / CURRENT_ADC_FILTER * CURRENT_IN_LINEAR_A + CURRENT_IN_LINEAR_B;
+//			Current_Out = (float)Current_Out_ADC_Buffer / CURRENT_ADC_FILTER;
+//			Current_In = (float)Current_In_ADC_Buffer / CURRENT_ADC_FILTER;
+			Current_Out_ADC_Buffer = 0;
+			Current_In_ADC_Buffer = 0;
+		}
+			
+		if(mode != (int)mode_f)
 		{
 			mode = mode_f;
 			mode_changed_flag = 1;
@@ -273,7 +291,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 			PID_Calc(&pid_voltage, Voltage_Out_Set - Voltage_Out);
 			ctrl += pid_voltage.output;
 			
-			ctrl = Voltage_Out_Set;  //***************************** TEST CODE *****************************
+//			ctrl = Voltage_Out_Set;  //***************************** TEST CODE *****************************
 			
 			LIMIT(ctrl, 0.5f, 2*MAX_VOLTAGE);
 		}
@@ -330,6 +348,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 				Serial_TX_Buffer.TX_Data[1] = Voltage_Out_Set;
 				Serial_TX_Buffer.TX_Data[2] = Current_Out;
 				Serial_TX_Buffer.TX_Data[3] = Current_In;
+//				Serial_TX_Buffer.TX_Data[2] = ADC_Buffer[2];
+//				Serial_TX_Buffer.TX_Data[3] = ADC_Buffer[3];
 			}
 			if(mode == 1)
 			{
