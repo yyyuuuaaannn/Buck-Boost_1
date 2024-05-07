@@ -1,1 +1,1 @@
-基于STM32F334的四开关Buck-Boost
+基于STM32F334C8T6的四开关Buck-Boost
